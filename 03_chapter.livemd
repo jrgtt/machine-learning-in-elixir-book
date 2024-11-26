@@ -1,0 +1,180 @@
+<!-- livebook:{"file_entries":[{"file":{"file_system_id":"local","file_system_type":"local","path":"/Users/jeanrigotti/dev/machine-learning-in-elixir/capivara.jpg"},"name":"capivara.jpg","type":"file"}]} -->
+
+# Machine Learning in Elixir - Chapter 3
+
+```elixir
+Mix.install([
+  {:nx, "~> 0.5"},
+  {:exla, "~> 0.5"},
+  {:kino, "~> 0.8"},
+  {:stb_image, "~> 0.6"},
+  {:vega_lite, "~> 0.1"},
+  {:kino_vega_lite, "~> 0.1"},
+], config: [nx: [default_backend: EXLA.Backend]])
+```
+
+## Section
+
+```elixir
+a = Nx.tensor([1, 2, 3])
+b = Nx.tensor([4.0, 5.0, 6.0])
+c = Nx.tensor([1, 0, 1], type: :u8)
+
+IO.inspect(a, label: "a")
+IO.inspect(b, label: "b")
+IO.inspect(c, label: "c")
+```
+
+```elixir
+goog_current_price = 2677.32
+goog_pe = 23.86
+goog_mkt_cap = 1760
+
+meta_current_price = 133.93
+meta_pe = 11.10
+meta_mkt_cap = 360
+
+stocks_matrix = Nx.tensor([
+  [goog_current_price, goog_pe, goog_mkt_cap],
+  [meta_current_price, meta_pe, meta_mkt_cap]
+])
+```
+
+```elixir
+sales_day_1 = Nx.tensor([32, 10, 14])
+sales_day_2 = Nx.tensor([10, 24, 21])
+total_sales = Nx.add(sales_day_1, sales_day_2)
+
+keep_rate = 0.9
+unreturned_sales = Nx.multiply(keep_rate, total_sales)
+```
+
+```elixir
+price_per_product = Nx.tensor([9.95, 10.95, 5.99])
+revenue_per_product = Nx.multiply(unreturned_sales, price_per_product)
+```
+
+```elixir
+sales_matrix = Nx.tensor([
+  [32, 10, 14],
+  [10, 24, 21]
+])
+|> Nx.transpose()
+```
+
+```elixir
+invert_color_channels = Nx.tensor([
+  [-1, 0, 0],
+  [0, -1, 0],
+  [0, 0, -1]
+])
+
+"/Users/jeanrigotti/dev/machine-learning-in-elixir/capivara.jpg"
+|> StbImage.read_file!()
+|> StbImage.resize(256, 256)
+|> StbImage.to_nx()
+|> Nx.dot(invert_color_channels)
+|> Nx.as_type({:u, 8})
+|> Kino.Image.new()
+```
+
+```elixir
+simulation = fn key ->
+  {value, key} = Nx.Random.uniform(key)
+  if Nx.to_number(value) < 0.5, do: {0, key}, else: {1, key}
+end
+```
+
+```elixir
+key = Nx.Random.key(42)
+
+for n <- [10, 100, 1000, 10_000] do
+  Enum.map_reduce(1..n, key, fn _, key -> simulation.(key) end)
+  |> elem(0)
+  |> Enum.sum()
+  |> IO.inspect()
+end
+```
+
+```elixir
+defmodule BerryFarm do
+  import Nx.Defn
+
+  defn profits(trees) do
+    trees
+    |> Nx.subtract(1)
+    |> Nx.pow(4)
+    |> Nx.negate()
+    |> Nx.add(Nx.pow(trees, 3))
+    |> Nx.add(Nx.pow(trees, 2))
+  end
+
+  defn profits_derivative(trees) do
+    grad(trees, &profits/1)
+  end
+end
+
+trees = Nx.linspace(0, 4, n: 100)
+profits = BerryFarm.profits(trees)
+
+alias VegaLite, as: Vl
+
+Vl.new(title: "Berry Profits", width: 800, height: 500)
+|> Vl.data_from_values(%{
+  trees: Nx.to_flat_list(trees),
+  profits: Nx.to_flat_list(profits)
+})
+|> Vl.mark(:line, interpolate: :basis)
+|> Vl.encode_field(:x, "trees", type: :quantitative)
+|> Vl.encode_field(:y, "profits", type: :quantitative)
+```
+
+```elixir
+trees = Nx.linspace(0, 3, n: 100)
+profits = BerryFarm.profits(trees)
+profits_derivative = BerryFarm.profits_derivative(trees)
+
+alias VegaLite, as: Vl
+title = "Berry Profits and Profits Rate of Change"
+
+Vl.new(title: title, width: 800, height: 500)
+|> Vl.data_from_values(%{
+  trees: Nx.to_flat_list(trees),
+  profits: Nx.to_flat_list(profits),
+  profits_derivative: Nx.to_flat_list(profits_derivative)
+})
+|> Vl.layers([
+    Vl.new()
+    |> Vl.mark(:line, interpolate: :basis)
+    |> Vl.encode_field(:x, "trees", type: :quantitative)
+    |> Vl.encode_field(:y, "profits", type: :quantitative),
+  
+    Vl.new()
+    |> Vl.mark(:line, interpolate: :basis)
+    |> Vl.encode_field(:x, "trees", type: :quantitative)
+    |> Vl.encode_field(:y, "profits_derivative", type: :quantitative)
+    |> Vl.encode(:color, value: "#ff0000")
+])
+```
+
+```elixir
+defmodule GradFn do
+  import Nx.Defn
+
+  defn my_function(x) do
+    x
+    |> Nx.cos()
+    |> Nx.exp()
+    |> Nx.sum()
+    |> print_expr()
+  end
+
+  defn grad_my_function(x) do
+    grad(x, &my_function/1) |> print_expr()
+  end
+end
+
+GradFn.grad_my_function(Nx.tensor([1.0, 2.0, 3.0]))
+```
+
+<!-- livebook:{"offset":3852,"stamp":{"token":"XCP.5EgML6cO3Ge7-lpdyEwk5cMdPy5sG0kIgOWK4g4kG4tRa4iGzVLPC5k3vS9vdhxP6jGQfMLmq9svmCK-YkZr6JXcqrXlc_VcqMMgcA","version":2}} -->
